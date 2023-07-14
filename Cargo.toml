@@ -1,0 +1,10 @@
+[package]
+name = "yew-alt-html"
+version = "0.1.0"
+edition = "2021"
+description = "Alternative macro for building Html in Yew."
+license = "MIT"
+repository = "https://github.com/kirillsemyonkin/yew-alt-html"
+
+[lib]
+proc-macro = true
