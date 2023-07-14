@@ -1,12 +1,16 @@
 # yew-alt-html
 
+[![crates.io](https://img.shields.io/crates/v/yew-alt-html)](https://crates.io/crates/yew-alt-html)
+[![download](https://img.shields.io/crates/d/yew-alt-html)](https://crates.io/crates/yew-alt-html)
+[![docs.rs](https://docs.rs/yew-alt-html/badge.svg)](https://docs.rs/yew-alt-html)
+
 Alternative macro for building `Html` in [Yew](https://yew.rs/).
 
 ## Example
 
 This example represents the root `App` component of a Yew application.
 It shows interpolation in text nodes, interpolation in attributes,
-multiple nodes in root of the macro, shortened tag closing.
+multiple nodes in the root of the macro, shortened tag closing.
 
 ```rust
 use yew::prelude::*;
