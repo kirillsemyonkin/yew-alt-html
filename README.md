@@ -79,6 +79,7 @@ or wrapping values in `{}` braces just like you do in `html!`.
       and generating virtual dom manually.
 - [ ] Using [Diagnostics API](https://github.com/rust-lang/rust/issues/54140)
       whenever it comes out for modifying spans and showing exact error spans
-      instead of making everything red.
+      instead of making everything red
+      (partially fixed in 0.3.0, still needs more future work with spans).
 - [ ] Proper testing. Currently the crate is tested manually on
       an extensive local project by the crate author.

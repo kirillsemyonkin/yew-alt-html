@@ -11,13 +11,12 @@ use crate::util::MatchOpt;
 // Group
 
 pub fn group(delimiter: Delimiter, items: impl IntoTokenStream) -> Group {
-    Group::new(
-        delimiter,
-        items.into_token_stream(),
-    )
+    Group::new(delimiter, items.into_token_stream())
 }
 
-pub fn brace(items: impl IntoTokenStream) -> Group { tt::group(Delimiter::Brace, items) }
+pub fn brace(items: impl IntoTokenStream) -> Group {
+    tt::group(Delimiter::Brace, items)
+}
 
 // Ident
 
@@ -26,11 +25,15 @@ pub trait IntoIdent {
 }
 
 impl IntoIdent for &str {
-    fn into_ident(self) -> Ident { Ident::new(self, Span::mixed_site()) }
+    fn into_ident(self) -> Ident {
+        Ident::new(self, Span::mixed_site())
+    }
 }
 
 impl IntoIdent for Ident {
-    fn into_ident(self) -> Ident { self }
+    fn into_ident(self) -> Ident {
+        self
+    }
 }
 
 pub fn ident(from: impl IntoIdent) -> Ident {
@@ -71,7 +74,9 @@ pub trait IntoPunct {
 impl IntoPunct for char {
     type Ret = Punct;
 
-    fn into_punct(self) -> Self::Ret { Punct::new(self, Spacing::Alone) }
+    fn into_punct(self) -> Self::Ret {
+        Punct::new(self, Spacing::Alone)
+    }
 }
 
 impl IntoPunct for &str {
@@ -97,10 +102,14 @@ impl IntoPunct for &str {
 impl IntoPunct for Punct {
     type Ret = Punct;
 
-    fn into_punct(self) -> Self::Ret { self }
+    fn into_punct(self) -> Self::Ret {
+        self
+    }
 }
 
-pub fn punct<I: IntoPunct>(from: I) -> I::Ret { from.into_punct() }
+pub fn punct<I: IntoPunct>(from: I) -> I::Ret {
+    from.into_punct()
+}
 
 // Literal
 
@@ -109,7 +118,9 @@ pub trait IntoLiteral {
 }
 
 impl IntoLiteral for String {
-    fn into_literal(self) -> Literal { Literal::string(&self) }
+    fn into_literal(self) -> Literal {
+        Literal::string(&self)
+    }
 }
 
 macro_rules! impl_into_literal {
@@ -139,8 +150,7 @@ impl_into_literal!(
 );
 
 pub fn literal(text: impl IntoLiteral) -> Literal {
-    text.into_literal()
-        .into()
+    text.into_literal().into()
 }
 
 //
@@ -152,41 +162,50 @@ pub trait IntoTokenStream {
 }
 
 impl IntoTokenStream for TokenTree {
-    fn into_token_stream(self) -> TokenStream { self.into() }
+    fn into_token_stream(self) -> TokenStream {
+        self.into()
+    }
 }
 
 impl IntoTokenStream for Group {
-    fn into_token_stream(self) -> TokenStream { TokenTree::from(self).into() }
+    fn into_token_stream(self) -> TokenStream {
+        TokenTree::from(self).into()
+    }
 }
 
 impl IntoTokenStream for Ident {
-    fn into_token_stream(self) -> TokenStream { TokenTree::from(self).into() }
+    fn into_token_stream(self) -> TokenStream {
+        TokenTree::from(self).into()
+    }
 }
 
 impl IntoTokenStream for Punct {
-    fn into_token_stream(self) -> TokenStream { TokenTree::from(self).into() }
+    fn into_token_stream(self) -> TokenStream {
+        TokenTree::from(self).into()
+    }
 }
 
 impl IntoTokenStream for Literal {
-    fn into_token_stream(self) -> TokenStream { TokenTree::from(self).into() }
+    fn into_token_stream(self) -> TokenStream {
+        TokenTree::from(self).into()
+    }
 }
 
 impl IntoTokenStream for TokenStream {
-    fn into_token_stream(self) -> TokenStream { self }
+    fn into_token_stream(self) -> TokenStream {
+        self
+    }
 }
 
 impl<T: IntoTokenStream> IntoTokenStream for Option<T> {
     fn into_token_stream(self) -> TokenStream {
-        self.map(T::into_token_stream)
-            .unwrap_or_default()
+        self.map(T::into_token_stream).unwrap_or_default()
     }
 }
 
 impl<T: IntoTokenStream> IntoTokenStream for Vec<T> {
     fn into_token_stream(self) -> TokenStream {
-        self.into_iter()
-            .map(T::into_token_stream)
-            .collect()
+        self.into_iter().map(T::into_token_stream).collect()
     }
 }
 
@@ -227,10 +246,19 @@ macro_rules! tt_call_macro {
     };
 }
 
-pub fn compile_error(message: &str) -> TokenStream {
-    call_macro(
-        tt_path!(compile_error),
-        tt_stream![tt::literal(message)],
+fn apply_spans_to_all_tokens(item: TokenStream, span: Span) -> TokenStream {
+    item.into_iter()
+        .map(|mut tt| {
+            tt.set_span(span); // did not think it was gonna be mutating
+            tt
+        })
+        .collect()
+}
+
+pub fn compile_error(message: &str, span: Span) -> TokenStream {
+    apply_spans_to_all_tokens(
+        call_macro(tt_path!(compile_error), tt_stream![tt::literal(message)]),
+        span,
     )
 }
 
@@ -243,14 +271,14 @@ pub trait IdentExt {
 }
 
 impl IdentExt for Ident {
-    fn raw_string(self) -> String { (&self).raw_string() }
+    fn raw_string(self) -> String {
+        (&self).raw_string()
+    }
 }
 
 impl IdentExt for &Ident {
     fn raw_string(self) -> String {
-        self.to_string()
-            .trim_start_matches("r#")
-            .to_string()
+        self.to_string().trim_start_matches("r#").to_string()
     }
 }
 
@@ -270,27 +298,10 @@ impl TokenStreamExt for TokenStream {
             .map(|tt| match tt {
                 TokenTree::Ident(ident) => ident.raw_string(),
                 TokenTree::Group(group) => match group.delimiter() {
-                    Delimiter::Parenthesis => format!(
-                        "({})",
-                        group
-                            .stream()
-                            .raw_string()
-                    ),
-                    Delimiter::Brace => format!(
-                        "{{{}}}",
-                        group
-                            .stream()
-                            .raw_string()
-                    ),
-                    Delimiter::Bracket => format!(
-                        "[{}]",
-                        group
-                            .stream()
-                            .raw_string()
-                    ),
-                    Delimiter::None => group
-                        .stream()
-                        .raw_string(),
+                    Delimiter::Parenthesis => format!("({})", group.stream().raw_string()),
+                    Delimiter::Brace => format!("{{{}}}", group.stream().raw_string()),
+                    Delimiter::Bracket => format!("[{}]", group.stream().raw_string()),
+                    Delimiter::None => group.stream().raw_string(),
                 },
                 other => other.to_string(),
             })
@@ -298,17 +309,22 @@ impl TokenStreamExt for TokenStream {
     }
 
     fn span(&self) -> Span {
-        Span::mixed_site() // TODO join all inner spans
+        // TODO join all inner spans
+        match self.clone().into_iter().next() {
+            Some(tt) => tt.span(),
+            None => Span::mixed_site(),
+        }
     }
 }
 
 impl TokenStreamExt for &TokenStream {
     fn raw_string(self) -> String {
-        self.clone()
-            .raw_string()
+        self.clone().raw_string()
     }
 
-    fn span(&self) -> Span { (**self).span() }
+    fn span(&self) -> Span {
+        (**self).span()
+    }
 }
 
 //

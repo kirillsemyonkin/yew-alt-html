@@ -49,6 +49,7 @@ pub(crate) use tt_path;
 pub(crate) use tt_stream;
 
 use crate::logic::read_children;
+use crate::logic::InvalidSyntax;
 use crate::reader::TokenReader;
 
 macro_rules! impl_proc_macro {
@@ -59,7 +60,7 @@ macro_rules! impl_proc_macro {
 
             match read_children::<read_children::InBlock>(reader) {
                 Ok(children) => tt_call_macro!(::yew::$yew_name!(children)),
-                Err(e) => tt::compile_error(e.0), // TODO use span
+                Err(InvalidSyntax(e, span)) => tt::compile_error(e, span),
             }
         })*
     };

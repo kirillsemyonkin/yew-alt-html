@@ -299,14 +299,20 @@ pub enum TagOpen {
 
 impl TagOpen {
     pub fn span(&self) -> Span {
-        Span::mixed_site() // TODO
+        // TODO span encompassing whole tag open
+        match self {
+            Self::Named { name, .. } => name.span(),
+            Self::Dashed { name, .. } => name.span(),
+            Self::Dynamic { start, .. } => start.span(),
+            Self::Fragment => Span::mixed_site(), // TODO at least grab angle brackets smh
+        }
     }
 
     pub fn close_match(&self, other: &TagClose) -> bool {
         match (self, other) {
             // (named, named): <_>...</_>
             (
-                Self::Named {
+                TagOpen::Named {
                     name: name1,
                     generics: generics1,
                     ..
@@ -318,7 +324,7 @@ impl TagOpen {
                 },
             ) => name1 == name2 && generics1 == generics2,
             // (dashed, dashed): <->...</->
-            (Self::Dashed { name: name1, .. }, TagClose::Dashed { name: name2, .. }) => {
+            (TagOpen::Dashed { name: name1, .. }, TagClose::Dashed { name: name2, .. }) => {
                 name1.to_string() == name2.to_string()
             }
             // (non-named, named): <@>...</_>, <>...</_>, <->...</_>
@@ -337,22 +343,21 @@ impl TagOpen {
 
 #[derive(Debug, Clone)]
 pub enum TagClose {
-    Named {
-        name: NamePath,
-        generics: Generics,
-    },
-    Dashed {
-        name: TokenStream,
-    },
-    Dynamic {
-        start: Punct,
-    },
+    Named { name: NamePath, generics: Generics },
+    Dashed { name: TokenStream },
+    Dynamic { start: Punct },
     Fragment,
 }
 
 impl TagClose {
     pub fn span(&self) -> Span {
-        Span::mixed_site() // TODO
+        // TODO span encompassing whole tag open
+        match self {
+            Self::Named { name, .. } => name.span(),
+            Self::Dashed { name, .. } => name.span(),
+            Self::Dynamic { start, .. } => start.span(),
+            Self::Fragment => Span::mixed_site(), // TODO at least grab angle brackets smh
+        }
     }
 }
 
@@ -495,6 +500,10 @@ pub struct NamePath(TokenStream);
 impl NamePath {
     pub fn new(parts: impl IntoTokenStream) -> Self {
         Self(parts.into_token_stream())
+    }
+
+    fn span(&self) -> Span {
+        self.0.span()
     }
 }
 
