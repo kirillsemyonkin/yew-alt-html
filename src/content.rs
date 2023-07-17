@@ -492,7 +492,7 @@ impl IntoTokenStream for Attributes {
     }
 }
 
-// TagName
+// NamePath
 
 #[derive(Debug, Clone)]
 pub struct NamePath(TokenStream);

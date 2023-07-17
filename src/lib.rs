@@ -20,18 +20,18 @@
 //! ```rust
 //! use yew::prelude::*;
 //! use yew_alt_html::ah;
-//! 
+//!
 //! enum LoadState {
 //!     Loading,
 //!     Failed,
 //!     Loaded,
 //! }
-//! 
+//!
 //! #[function_component]
 //! pub fn App() -> Html {
 //!     let name = "Yew";
 //!     let italic_style = "font-style: italic";
-//! 
+//!
 //!     use LoadState::*;
 //!     let state = Loaded;
 //!     ah! {
@@ -60,9 +60,9 @@ pub(crate) use tt_call_macro;
 pub(crate) use tt_path;
 pub(crate) use tt_stream;
 
-use crate::logic::read_children;
-use crate::logic::InvalidSyntax;
-use crate::reader::TokenReader;
+use self::logic::errors::InvalidSyntax;
+use self::logic::read_children;
+use self::reader::TokenReader;
 
 macro_rules! impl_proc_macro {
     ($($name:ident -> $yew_name:ident),* $(,)?) => {
