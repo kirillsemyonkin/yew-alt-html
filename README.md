@@ -57,6 +57,7 @@ Following problems should be solved by this crate:
   (not very HTML to get rid of, but still neat to have considered)
   when closing tags.
 - Having to use fragment `<></>` when using multiple nodes in the macro root.
+- Not being able to use `match` just like `if`.
 
 ## Possible issues
 

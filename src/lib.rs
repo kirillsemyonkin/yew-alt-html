@@ -20,15 +20,27 @@
 //! ```rust
 //! use yew::prelude::*;
 //! use yew_alt_html::ah;
-//!
+//! 
+//! enum LoadState {
+//!     Loading,
+//!     Failed,
+//!     Loaded,
+//! }
+//! 
 //! #[function_component]
-//! pub fn App() {
+//! pub fn App() -> Html {
 //!     let name = "Yew";
 //!     let italic_style = "font-style: italic";
-//!
+//! 
+//!     use LoadState::*;
+//!     let state = Loaded;
 //!     ah! {
 //!         <h1 style=italic_style>"Hello " name "!"</>
-//!         <p>"Welcome to "<code>"yew-alt-html"</>"!"</>
+//!         match state {
+//!             Loading => "Loading...",
+//!             Failed => "Load failed!",
+//!             Loaded => <p>"Welcome to "<code>"yew-alt-html"</>"!"</>,
+//!         }
 //!     }
 //! }
 //! ```
