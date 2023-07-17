@@ -10,20 +10,33 @@ Alternative macro for building `Html` in [Yew](https://yew.rs/).
 
 This example represents the root `App` component of a Yew application.
 It shows interpolation in text nodes, interpolation in attributes,
-multiple nodes in the root of the macro, shortened tag closing.
+multiple nodes in the root of the macro, shortened tag closing,
+using tags in match expressions.
 
 ```rust
 use yew::prelude::*;
 use yew_alt_html::ah;
 
+enum LoadState {
+    Loading,
+    Failed,
+    Loaded,
+}
+
 #[function_component]
-pub fn App() {
+pub fn App() -> Html {
     let name = "Yew";
     let italic_style = "font-style: italic";
 
+    use LoadState::*;
+    let state = Loaded;
     ah! {
         <h1 style=italic_style>"Hello " name "!"</>
-        <p>"Welcome to "<code>"yew-alt-html"</>"!"</>
+        match state {
+            Loading => "Loading...",
+            Failed => "Load failed!",
+            Loaded => <p>"Welcome to "<code>"yew-alt-html"</>"!"</>,
+        }
     }
 }
 ```
@@ -58,8 +71,9 @@ or wrapping values in `{}` braces just like you do in `html!`.
 
 ## Planned
 
-- [ ] Support for writing tags directly in `match` cases
-      (requires wrapping the tag in `ah!` currently), similar to `if`.
+- [x] Support for writing tags directly in `match` cases
+      (requires wrapping the tag in `ah!` currently), similar to `if`
+      (added in 0.2.0).
 - [ ] Not using `html!` under the hood: adding more checks
       (that are currently handled by `html!`)
       and generating virtual dom manually.

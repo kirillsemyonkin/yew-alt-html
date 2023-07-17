@@ -17,7 +17,7 @@ pub fn group(delimiter: Delimiter, items: impl IntoTokenStream) -> Group {
     )
 }
 
-pub fn brace(items: impl IntoTokenStream) -> Group { group(Delimiter::Brace, items) }
+pub fn brace(items: impl IntoTokenStream) -> Group { tt::group(Delimiter::Brace, items) }
 
 // Ident
 
@@ -31,6 +31,10 @@ impl IntoIdent for &str {
 
 impl IntoIdent for Ident {
     fn into_ident(self) -> Ident { self }
+}
+
+pub fn ident(from: impl IntoIdent) -> Ident {
+    from.into_ident()
 }
 
 macro_rules! tt_path {
@@ -50,7 +54,7 @@ pub fn path(r#extern: bool, parts: Vec<impl IntoIdent>) -> TokenStream {
             let non_first_or_extern = i != 0 || r#extern;
             tt_stream![
                 non_first_or_extern.then(|| tt::punct("::")),
-                ident.into_ident()
+                tt::ident(ident)
             ]
         })
         .collect()

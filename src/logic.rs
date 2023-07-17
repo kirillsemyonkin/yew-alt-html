@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::vec;
 
 use proc_macro::*;
@@ -9,9 +8,11 @@ use crate::content::Attributes;
 use crate::content::Content;
 use crate::content::Generics;
 use crate::content::IfOptLet;
+use crate::content::Match;
+use crate::content::MatchCase;
+use crate::content::NamePath;
 use crate::content::Tag;
 use crate::content::TagClose;
-use crate::content::TagNamePath;
 use crate::content::TagOpen;
 use crate::reader::TokenReader;
 use crate::tt::IdentExt;
@@ -252,11 +253,13 @@ pub fn read_if_opt_let_expr(reader: TokenReader) -> Result<TokenStream, ComplexE
     }
 
     results.append_from(
-        read_expression(reader.clone(), vec![])
-            .require_or_invalid_syntax("Expected a condition for an if-let expression", span)?,
+        read_expression(reader.clone(), vec![]).require_or_invalid_syntax(
+            "Expected a condition for an if-optionally-let expression",
+            span,
+        )?,
     );
     results.push_from(read_brace(reader.clone()).require_or_invalid_syntax(
-        "Expected an if-true braces value for an if-let expression",
+        "Expected an if-true braces value for an if-optionally-let expression",
         span,
     )?);
 
@@ -282,7 +285,7 @@ pub fn read_if_opt_let_expr(reader: TokenReader) -> Result<TokenStream, ComplexE
         }
 
         return Err((
-            "Expected an if-false braces value for an if-let expression",
+            "Expected an if-false braces value or another if-optionally-let expression for an else-part of an if-optionally-let expression",
             span,
         ))?;
     }
@@ -625,7 +628,7 @@ pub fn read_tag_name_dashed(reader: TokenReader) -> Result<TokenStream, DoesNotM
     ctx.complete_with(tt_stream![parts])
 }
 
-pub fn read_tag_name_path(reader: TokenReader) -> Result<TagNamePath, DoesNotMatchPrerequisite> {
+pub fn read_name_path(reader: TokenReader) -> Result<NamePath, DoesNotMatchPrerequisite> {
     let ctx = reader.save();
 
     let mut result = Vec::<TokenTree>::new();
@@ -646,7 +649,7 @@ pub fn read_tag_name_path(reader: TokenReader) -> Result<TagNamePath, DoesNotMat
 
     any_names.require_or_does_not_match_prerequisite()?;
 
-    ctx.complete_with(TagNamePath::new(result))
+    ctx.complete_with(NamePath::new(result))
 }
 
 pub fn read_tag_open(reader: TokenReader) -> Result<(TagOpen, bool), ComplexError> {
@@ -690,7 +693,7 @@ pub fn read_tag_open(reader: TokenReader) -> Result<(TagOpen, bool), ComplexErro
             break 'read_name TagOpen::Dashed { name, attributes };
         }
 
-        if let Ok(name) = read_tag_name_path(reader.clone()) {
+        if let Ok(name) = read_name_path(reader.clone()) {
             let generics = read_generics(reader.clone())?.unwrap_or_else(|| Generics::empty(span)); // TODO span after name
             let attributes = read_attributes(reader.clone())?;
 
@@ -745,7 +748,7 @@ pub fn read_tag_close(reader: TokenReader, span: Span) -> Result<TagClose, Inval
             break 'read_name TagClose::Dashed { name };
         }
 
-        if let Ok(name) = read_tag_name_path(reader.clone()) {
+        if let Ok(name) = read_name_path(reader.clone()) {
             let generics = read_generics(reader.clone())?.unwrap_or_else(|| Generics::empty(span)); // TODO span after name
 
             break 'read_name TagClose::Named { name, generics };
@@ -793,17 +796,19 @@ pub fn read_if_opt_let_content(reader: TokenReader) -> Result<IfOptLet, ComplexE
     }
 
     condition.append_from(
-        read_expression(reader.clone(), vec![])
-            .require_or_invalid_syntax("Expected a condition for an if-let content", span)?,
+        read_expression(reader.clone(), vec![]).require_or_invalid_syntax(
+            "Expected a condition for an if-optionally-let content",
+            span,
+        )?,
     );
 
     let if_true = read_brace(reader.clone()).require_or_invalid_syntax(
-        "Expected an if-true braces value for an if-let content",
+        "Expected an if-true braces value for an if-optionally-let content",
         span,
     )?;
     let if_true = read_children::<read_children::InBlock>(if_true.stream())?;
 
-    let mut r#else = None::<(Ident, Rc<Content>)>;
+    let mut r#else = None::<(Ident, Box<Content>)>;
     'read_else: {
         let else_keyword = match read_ident_exact(reader.clone(), "else") {
             Ok(else_keyword) => else_keyword,
@@ -812,7 +817,7 @@ pub fn read_if_opt_let_content(reader: TokenReader) -> Result<IfOptLet, ComplexE
 
         match read_if_opt_let_content(reader.clone()) {
             Ok(else_if) => {
-                r#else = Some((else_keyword, Rc::new(Content::IfOptLet(else_if))));
+                r#else = Some((else_keyword, Box::new(Content::IfOptLet(else_if))));
                 break 'read_else;
             }
             Err(ComplexError::DoesNotMatchPrerequisite) => {}
@@ -822,23 +827,19 @@ pub fn read_if_opt_let_content(reader: TokenReader) -> Result<IfOptLet, ComplexE
         match read_brace(reader.clone()) {
             Ok(if_false) => {
                 let if_false = read_children::<read_children::InBlock>(if_false.stream())?;
-                r#else = Some((else_keyword, Rc::new(if_false)));
+                r#else = Some((else_keyword, Box::new(if_false)));
                 break 'read_else;
             }
             Err(DoesNotMatchPrerequisite) => {}
         }
 
         return Err((
-            "Expected an if-false braces value or another if expression for an if-let content",
+            "Expected an if-false braces value or another if-optionally-let expression for an else-part of an if-optionally-let content",
             span,
         ))?;
     }
 
-    ctx.complete_with(IfOptLet::new(
-        (if_keyword, condition),
-        Rc::new(if_true),
-        r#else,
-    ))
+    ctx.complete_with(IfOptLet::new(if_keyword, condition, if_true, r#else))
 }
 
 pub fn read_for_content(
@@ -855,13 +856,197 @@ pub fn read_for_content(
         Err(DoesNotMatchPrerequisite) => {}
     };
 
-    let r#for = read_ident_exact(reader.clone(), "for")?;
-    let span = r#for.span();
+    let for_keyword = read_ident_exact(reader.clone(), "for")?;
+    let span = for_keyword.span();
 
     let expr = read_expression(reader.clone(), early_quit_punct_sequences)
-        .require_or_invalid_syntax("Expected an expression after for keyword", span)?;
+        .require_or_invalid_syntax("Expected an expression after a `for` keyword", span)?;
 
-    ctx.complete_with(tt_stream![r#for, expr])
+    ctx.complete_with(tt_stream![for_keyword, expr])
+}
+
+pub fn read_match_content_case_pattern(
+    reader: impl Into<TokenReader>,
+) -> Result<TokenStream, ComplexError> {
+    let reader = reader.into();
+
+    'read_path_group: {
+        let ctx = reader.save();
+
+        let name_path = match read_name_path(reader.clone()) {
+            Ok(name_path) => name_path,
+            Err(DoesNotMatchPrerequisite) => break 'read_path_group,
+        };
+        let group = match read_group(reader.clone()) {
+            Ok(group) => Some(group),
+            Err(DoesNotMatchPrerequisite) => None,
+        };
+
+        return ctx.complete_with(tt_stream![name_path, group]);
+    }
+
+    'read_group: {
+        let ctx = reader.save();
+
+        let group = match read_group(reader.clone()) {
+            Ok(group) => group,
+            Err(DoesNotMatchPrerequisite) => break 'read_group,
+        };
+
+        return ctx.complete_with(tt_stream![group]);
+    }
+
+    Err(ComplexError::DoesNotMatchPrerequisite)?
+}
+
+pub fn read_match_content_case_pattern_chain(
+    reader: impl Into<TokenReader>,
+) -> Result<TokenStream, ComplexError> {
+    let reader = reader.into();
+    let ctx = reader.save();
+
+    let mut results = Vec::<TokenStream>::new();
+
+    if let Ok(pre_or) = read_punct_exact(reader.clone(), '|') {
+        results.push(tt_stream![pre_or]);
+    }
+
+    let mut any_patterns = false;
+    loop {
+        match read_match_content_case_pattern(reader.clone()) {
+            Ok(case) => results.push(case),
+            Err(ComplexError::DoesNotMatchPrerequisite) => break,
+            Err(e) => return Err(e),
+        }
+        any_patterns = true;
+
+        match read_punct_exact(reader.clone(), '|') {
+            Ok(or) => results.push(tt_stream![or]),
+            Err(DoesNotMatchPrerequisite) => break,
+        }
+    }
+
+    any_patterns.require_or_does_not_match_prerequisite()?;
+
+    if let Ok(guard_keyword) = read_ident_exact(reader.clone(), "if") {
+        let span = guard_keyword.span();
+
+        let guard = read_expression(reader.clone(), vec!["=>"]).require_or_invalid_syntax(
+            "Expected expression after match guard `if` keyword",
+            span,
+        )?;
+
+        results.push(tt_stream![guard_keyword, guard])
+    }
+
+    ctx.complete_with(tt_stream![results])
+}
+
+pub fn read_match_content_case_value(
+    reader: impl Into<TokenReader>,
+    span: Span,
+) -> Result<(Content, bool), InvalidSyntax> {
+    let reader = reader.into();
+    let ctx = reader.save();
+
+    match read_brace(reader.clone()) {
+        Ok(group) => {
+            return read_children::<read_children::InBlock>(group.stream())
+                .and_then(|value| ctx.complete_with((value, true)))
+        }
+        Err(DoesNotMatchPrerequisite) => {}
+    };
+
+    let value = read_content::<read_content::InMatchCase>(reader.clone())
+        .require_or_invalid_syntax("Expected content after the match case arrow", span)?;
+
+    ctx.complete_with((value, false))
+}
+
+pub fn read_match_content_case(
+    reader: impl Into<TokenReader>,
+) -> Result<(MatchCase, bool), ComplexError> {
+    let reader = reader.into();
+    let ctx = reader.save();
+
+    let pattern = read_match_content_case_pattern_chain(reader.clone())?;
+    let span = pattern.span();
+
+    let arrow = tt_stream![read_punct_exact(reader.clone(), "=>")
+        .require_or_invalid_syntax("Expected match case arrow after match case pattern", span)?];
+    let span = arrow.span();
+
+    let (value, is_brace) = read_match_content_case_value(reader.clone(), span)?;
+
+    ctx.complete_with((
+        MatchCase::Case {
+            pattern,
+            arrow,
+            value,
+        },
+        is_brace,
+    ))
+}
+
+pub fn read_match_content_cases(
+    reader: impl Into<TokenReader>,
+) -> Result<Vec<MatchCase>, InvalidSyntax> {
+    let reader = reader.into();
+    let ctx = reader.save();
+
+    let mut results = Vec::new();
+    loop {
+        let is_brace = match read_match_content_case(reader.clone()) {
+            Ok((case, is_brace)) => {
+                results.push(case);
+                is_brace
+            }
+            Err(ComplexError::DoesNotMatchPrerequisite) => break,
+            Err(ComplexError::InvalidSyntax(e)) => return Err(e),
+        };
+
+        match read_punct_exact(reader.clone(), ',') {
+            Ok(comma) => results.push(MatchCase::Comma(comma)),
+            Err(DoesNotMatchPrerequisite) => {
+                if !is_brace {
+                    break;
+                }
+            }
+        }
+    }
+
+    if let Some(span) = reader.remaining_span() {
+        return Err(("ah! match brace read dangling text", span))?;
+    }
+
+    ctx.complete_with(results)
+}
+
+pub fn read_match_content(reader: TokenReader) -> Result<Match, ComplexError> {
+    let ctx = reader.save();
+
+    match read_brace(reader.clone()) {
+        Ok(group) => {
+            return read_match_content(TokenReader::from(group.stream()))
+                .and_then(|value| ctx.complete_with(value))
+        }
+        Err(DoesNotMatchPrerequisite) => {}
+    };
+
+    let match_keyword = read_ident_exact(reader.clone(), "match")?;
+    let span = match_keyword.span();
+
+    let value = read_expression(reader.clone(), vec![])
+        .require_or_invalid_syntax("Expected a value expression after a `match` keyword", span)?;
+
+    let group = read_brace(reader.clone()).require_or_invalid_syntax(
+        "Expected a match cases brace after a match value expression",
+        span,
+    )?;
+
+    let cases = read_match_content_cases(group.stream())?;
+
+    ctx.complete_with(Match::new(match_keyword, value, cases))
 }
 
 //
@@ -900,6 +1085,18 @@ pub mod read_content {
             vec!["<"]
         }
     }
+
+    pub struct InMatchCase;
+
+    impl Location for InMatchCase {
+        fn early_quit_punct_sequences() -> Vec<&'static str> {
+            vec![","]
+        }
+
+        fn early_quit_punct_sequences_expr() -> Vec<&'static str> {
+            vec![","]
+        }
+    }
 }
 
 pub fn read_content<Loc: read_content::Location>(
@@ -933,6 +1130,12 @@ pub fn read_content<Loc: read_content::Location>(
 
     match read_if_opt_let_content(reader.clone()) {
         Ok(if_opt_let) => return ctx.complete_with(Content::IfOptLet(if_opt_let)),
+        Err(ComplexError::DoesNotMatchPrerequisite) => {}
+        Err(e) => return Err(e),
+    }
+
+    match read_match_content(reader.clone()) {
+        Ok(r#match) => return ctx.complete_with(Content::Match(r#match)),
         Err(ComplexError::DoesNotMatchPrerequisite) => {}
         Err(e) => return Err(e),
     }
@@ -1020,12 +1223,7 @@ pub fn read_children<Loc: read_children::Location>(
         }
     }
 
-    let dangling_span = {
-        let ctx = reader.save();
-        ctx.next().as_ref().map(TokenTree::span) // TODO read until end to determine total span
-    };
-
-    let result = Loc::process_children(children, dangling_span)?;
+    let result = Loc::process_children(children, reader.remaining_span())?;
     ctx.complete_with(result)
 }
 
@@ -1035,10 +1233,8 @@ mod private {
     pub trait Sealed {}
 
     impl Sealed for read_children::InTag {}
-
     impl Sealed for read_children::InBlock {}
-
     impl Sealed for read_content::InTag {}
-
     impl Sealed for read_content::InBlock {}
+    impl Sealed for read_content::InMatchCase {}
 }

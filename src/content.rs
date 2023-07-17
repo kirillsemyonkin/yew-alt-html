@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 
 use proc_macro::*;
 
@@ -7,6 +6,7 @@ use crate::tt;
 use crate::tt::IdentExt;
 use crate::tt::IntoTokenStream;
 use crate::tt::TokenStreamExt;
+use crate::tt_call_macro;
 use crate::tt_stream;
 
 #[derive(Debug, Clone)]
@@ -14,22 +14,98 @@ pub enum Content {
     Tag(Tag),
     For(TokenStream),
     IfOptLet(IfOptLet),
+    Match(Match),
     Expression(TokenStream),
 }
 
 impl From<Content> for TokenStream {
     fn from(content: Content) -> Self {
         match content {
-            Content::Tag(tag) => tt_stream!(tag),
-            Content::For(expr) => tt_stream!(tt::brace(expr)),
-            Content::IfOptLet(if_opt_let) => tt_stream!(if_opt_let),
-            Content::Expression(expr) => tt_stream!(tt::brace(expr)),
+            Content::Tag(tag) => tt_stream![tag],
+            Content::For(expr) => tt_stream![tt::brace(expr)],
+            Content::IfOptLet(if_opt_let) => tt_stream![if_opt_let],
+            Content::Match(r#match) => tt_stream![r#match],
+            Content::Expression(expr) => tt_stream![tt::brace(expr)],
         }
     }
 }
 
 impl IntoTokenStream for Content {
-    fn into_token_stream(self) -> TokenStream { self.into() }
+    fn into_token_stream(self) -> TokenStream {
+        self.into()
+    }
+}
+
+//
+// Match
+//
+
+#[derive(Debug, Clone)]
+pub struct Match {
+    match_keyword: Ident,
+    value: TokenStream,
+    cases: Vec<MatchCase>,
+}
+
+impl Match {
+    pub fn new(match_keyword: Ident, value: TokenStream, cases: Vec<MatchCase>) -> Self {
+        Self {
+            match_keyword,
+            value,
+            cases,
+        }
+    }
+}
+
+impl From<Match> for TokenStream {
+    fn from(
+        Match {
+            match_keyword,
+            value,
+            cases,
+        }: Match,
+    ) -> Self {
+        tt_stream![tt::brace(tt_stream![
+            match_keyword,
+            value,
+            tt::brace(cases)
+        ])]
+    }
+}
+
+impl IntoTokenStream for Match {
+    fn into_token_stream(self) -> TokenStream {
+        self.into()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum MatchCase {
+    Case {
+        pattern: TokenStream,
+        arrow: TokenStream,
+        value: Content,
+    },
+    Comma(Punct),
+}
+
+impl From<MatchCase> for TokenStream {
+    fn from(case: MatchCase) -> Self {
+        match case {
+            MatchCase::Case {
+                pattern,
+                arrow,
+                value,
+            } => tt_stream![pattern, arrow, tt_call_macro!(::yew::html!(value))],
+            MatchCase::Comma(comma) => tt_stream![comma],
+        }
+    }
+}
+
+impl IntoTokenStream for MatchCase {
+    fn into_token_stream(self) -> TokenStream {
+        self.into()
+    }
 }
 
 //
@@ -38,23 +114,23 @@ impl IntoTokenStream for Content {
 
 #[derive(Debug, Clone)]
 pub struct IfOptLet {
-    condition: (Ident, TokenStream),
-    if_true: Rc<Content>,
-    r#else: Option<(Ident, Rc<Content>)>,
+    if_keyword: Ident,
+    condition: TokenStream,
+    if_true: Box<Content>,
+    r#else: Option<(Ident, Box<Content>)>,
 }
 
 impl IfOptLet {
     pub fn new(
-        (if_keyword, condition): (Ident, impl IntoTokenStream),
-        if_true: Rc<Content>,
-        r#else: Option<(Ident, Rc<Content>)>,
+        if_keyword: Ident,
+        condition: impl IntoTokenStream,
+        if_true: Content,
+        r#else: Option<(Ident, Box<Content>)>,
     ) -> Self {
         Self {
-            condition: (
-                if_keyword,
-                condition.into_token_stream(),
-            ),
-            if_true,
+            if_keyword,
+            condition: condition.into_token_stream(),
+            if_true: Box::new(if_true),
             r#else,
         }
     }
@@ -63,7 +139,8 @@ impl IfOptLet {
 impl From<IfOptLet> for TokenStream {
     fn from(
         IfOptLet {
-            condition: (if_keyword, condition),
+            if_keyword,
+            condition,
             if_true,
             r#else,
         }: IfOptLet,
@@ -79,7 +156,9 @@ impl From<IfOptLet> for TokenStream {
 }
 
 impl IntoTokenStream for IfOptLet {
-    fn into_token_stream(self) -> TokenStream { self.into() }
+    fn into_token_stream(self) -> TokenStream {
+        self.into()
+    }
 }
 
 //
@@ -137,7 +216,7 @@ impl From<Tag> for TokenStream {
                     generics.clone(),
                     tt::punct('>'),
                 ]
-            },
+            }
             TagOpen::Dashed { name, attributes } => {
                 if void {
                     // <... ...=... />
@@ -158,7 +237,7 @@ impl From<Tag> for TokenStream {
                     name.clone(),
                     tt::punct('>'),
                 ]
-            },
+            }
             TagOpen::Dynamic {
                 start,
                 name,
@@ -185,14 +264,16 @@ impl From<Tag> for TokenStream {
                     start.clone(),
                     tt::punct('>'),
                 ]
-            },
+            }
             TagOpen::Fragment => tt_stream![tt::punct("<>"), children, tt::punct("</>")],
         }
     }
 }
 
 impl IntoTokenStream for Tag {
-    fn into_token_stream(self) -> TokenStream { self.into() }
+    fn into_token_stream(self) -> TokenStream {
+        self.into()
+    }
 }
 
 // TagOpen
@@ -200,7 +281,7 @@ impl IntoTokenStream for Tag {
 #[derive(Debug, Clone)]
 pub enum TagOpen {
     Named {
-        name: TagNamePath,
+        name: NamePath,
         generics: Generics,
         attributes: Attributes,
     },
@@ -237,8 +318,9 @@ impl TagOpen {
                 },
             ) => name1 == name2 && generics1 == generics2,
             // (dashed, dashed): <->...</->
-            (Self::Dashed { name: name1, .. }, TagClose::Dashed { name: name2, .. }) =>
-                name1.to_string() == name2.to_string(),
+            (Self::Dashed { name: name1, .. }, TagClose::Dashed { name: name2, .. }) => {
+                name1.to_string() == name2.to_string()
+            }
             // (non-named, named): <@>...</_>, <>...</_>, <->...</_>
             (_, TagClose::Named { .. }) => false,
             // (non-dashed, dashed): <@>...</->, <>...</->, <_>...</->
@@ -256,7 +338,7 @@ impl TagOpen {
 #[derive(Debug, Clone)]
 pub enum TagClose {
     Named {
-        name: TagNamePath,
+        name: NamePath,
         generics: Generics,
     },
     Dashed {
@@ -290,9 +372,13 @@ impl Generics {
         }
     }
 
-    pub fn empty(span: Span) -> Self { Self { value: None, span } }
+    pub fn empty(span: Span) -> Self {
+        Self { value: None, span }
+    }
 
-    pub fn span(&self) -> Span { self.span }
+    pub fn span(&self) -> Span {
+        self.span
+    }
 }
 
 impl PartialEq for Generics {
@@ -316,7 +402,9 @@ impl From<Generics> for TokenStream {
 }
 
 impl IntoTokenStream for Generics {
-    fn into_token_stream(self) -> TokenStream { self.into() }
+    fn into_token_stream(self) -> TokenStream {
+        self.into()
+    }
 }
 
 // Attributes
@@ -350,7 +438,9 @@ impl From<Attribute> for TokenStream {
 }
 
 impl IntoTokenStream for Attribute {
-    fn into_token_stream(self) -> TokenStream { self.into() }
+    fn into_token_stream(self) -> TokenStream {
+        self.into()
+    }
 }
 
 impl Attribute {
@@ -375,7 +465,9 @@ pub struct Attributes {
 }
 
 impl Attributes {
-    pub fn new(values: HashMap<String, Attribute>) -> Self { Self { values } }
+    pub fn new(values: HashMap<String, Attribute>) -> Self {
+        Self { values }
+    }
 }
 
 impl From<Attributes> for TokenStream {
@@ -390,28 +482,36 @@ impl From<Attributes> for TokenStream {
 }
 
 impl IntoTokenStream for Attributes {
-    fn into_token_stream(self) -> TokenStream { self.into() }
+    fn into_token_stream(self) -> TokenStream {
+        self.into()
+    }
 }
 
 // TagName
 
 #[derive(Debug, Clone)]
-pub struct TagNamePath(TokenStream);
+pub struct NamePath(TokenStream);
 
-impl TagNamePath {
-    pub fn new(parts: impl IntoTokenStream) -> Self { Self(parts.into_token_stream()) }
+impl NamePath {
+    pub fn new(parts: impl IntoTokenStream) -> Self {
+        Self(parts.into_token_stream())
+    }
 }
 
-impl PartialEq for TagNamePath {
+impl PartialEq for NamePath {
     fn eq(&self, other: &Self) -> bool {
         TokenStreamExt::raw_string(&self.0) == TokenStreamExt::raw_string(&other.0)
     }
 }
 
-impl From<TagNamePath> for TokenStream {
-    fn from(name: TagNamePath) -> Self { name.0 }
+impl From<NamePath> for TokenStream {
+    fn from(name: NamePath) -> Self {
+        name.0
+    }
 }
 
-impl IntoTokenStream for TagNamePath {
-    fn into_token_stream(self) -> TokenStream { self.into() }
+impl IntoTokenStream for NamePath {
+    fn into_token_stream(self) -> TokenStream {
+        self.into()
+    }
 }

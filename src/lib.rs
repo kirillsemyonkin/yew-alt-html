@@ -1,12 +1,12 @@
 //! Alternative macro for building Html in Yew.
-//! 
+//!
 //! This crate experiments on creating a macro that would be easier to use.
 //! For this, the [`html!` syntax](https://yew.rs/docs/concepts/html)
 //! that was a bit cumbersome to use
 //! is replaced by direct usage of values in `ah!`.
-//! 
+//!
 //! Following problems should be solved by this crate:
-//! 
+//!
 //! - Having to use `{}` inside tags even when values are simple literals.
 //! - Having to wrap attributes in `{}`
 //!   (mind that shorthand still uses `{ variable }`).
@@ -14,9 +14,9 @@
 //!   (not very HTML to get rid of, but still neat to have considered)
 //!   when closing tags.
 //! - Having to use fragment `<></>` when using multiple nodes in the macro root.
-//! 
+//!
 //! ## Example
-//! 
+//!
 //! ```rust
 //! use yew::prelude::*;
 //! use yew_alt_html::ah;

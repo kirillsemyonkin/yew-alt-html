@@ -66,6 +66,11 @@ impl TokenReader {
         }
     }
 
+    pub fn remaining_span(&self) -> Option<Span> {
+        let ctx = self.save();
+        ctx.next().as_ref().map(TokenTree::span) // TODO read until end to determine total span
+    }
+
     fn restore(&self) {
         let mut state = self
             .state
