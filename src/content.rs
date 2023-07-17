@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use proc_macro::*;
 
 use crate::tt;
@@ -426,6 +424,10 @@ pub enum Attribute {
         variable: Ident,
         property: Option<Punct>,
     },
+    PropSpread {
+        rest: Vec<Punct>,
+        variable: Ident,
+    },
 }
 
 impl From<Attribute> for TokenStream {
@@ -438,6 +440,7 @@ impl From<Attribute> for TokenStream {
                 property,
             } => tt_stream![property, name, equals, tt::brace(value)],
             Attribute::Short { variable, property } => tt_stream![property, tt::brace(variable)],
+            Attribute::PropSpread { rest, variable } => tt_stream![rest, variable],
         }
     }
 }
@@ -449,28 +452,30 @@ impl IntoTokenStream for Attribute {
 }
 
 impl Attribute {
-    pub fn name_span(&self) -> Span {
+    pub fn name_span(&self) -> Option<Span> {
         match self {
-            Attribute::Full { name, .. } => name.span(),
-            Attribute::Short { variable, .. } => variable.span(),
+            Attribute::Full { name, .. } => Some(name.span()),
+            Attribute::Short { variable, .. } => Some(variable.span()),
+            Attribute::PropSpread { .. } => None,
         }
     }
 
-    pub fn name_string(&self) -> String {
+    pub fn name_string(&self) -> Option<String> {
         match self {
-            Attribute::Full { name, .. } => name.raw_string(),
-            Attribute::Short { variable, .. } => variable.raw_string(),
+            Attribute::Full { name, .. } => Some(name.raw_string()),
+            Attribute::Short { variable, .. } => Some(variable.raw_string()),
+            Attribute::PropSpread { .. } => None,
         }
     }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Attributes {
-    values: HashMap<String, Attribute>,
+    values: Vec<Attribute>,
 }
 
 impl Attributes {
-    pub fn new(values: HashMap<String, Attribute>) -> Self {
+    pub fn new(values: Vec<Attribute>) -> Self {
         Self { values }
     }
 }
@@ -479,7 +484,6 @@ impl From<Attributes> for TokenStream {
     fn from(attributes: Attributes) -> Self {
         attributes
             .values
-            .into_values()
             .into_iter()
             .map(IntoTokenStream::into_token_stream)
             .collect()

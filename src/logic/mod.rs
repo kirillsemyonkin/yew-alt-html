@@ -1,10 +1,10 @@
 pub mod errors;
 mod expr;
 mod pat;
-mod tt;
 mod path;
+mod tt;
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::vec;
 
 use proc_macro::*;
@@ -88,6 +88,21 @@ pub fn read_attribute_name(reader: TokenReader) -> Result<TokenStream, DoesNotMa
     ctx.complete_with(tt_stream![parts])
 }
 
+pub fn read_prop_spread(reader: impl Into<TokenReader>) -> Result<Attribute, ComplexError> {
+    let reader = reader.into();
+    let ctx = reader.save();
+
+    let rest = read_punct_exact(reader.clone(), "..")?;
+    let span = rest[0].span(); // TODO span for both
+
+    let variable = read_ident(reader.clone()).require_or_invalid_syntax(
+        "Expected a variable name after '..' prop spread operator",
+        span,
+    )?;
+
+    ctx.complete_with(Attribute::PropSpread { rest, variable })
+}
+
 pub fn read_short_attribute(reader: TokenReader) -> Result<Attribute, ComplexError> {
     let ctx = reader.save();
 
@@ -102,10 +117,16 @@ pub fn read_short_attribute(reader: TokenReader) -> Result<Attribute, ComplexErr
         span,
     )?;
 
-    let variable = read_ident(TokenReader::from(group.stream())).require_or_invalid_syntax(
+    let variable_reader = TokenReader::from(group.stream());
+
+    let variable = read_ident(variable_reader.clone()).require_or_invalid_syntax(
         "Shorthand for attributes should contain a variable name",
         span,
     )?;
+
+    if let Some(span) = variable_reader.remaining_span() {
+        return Err(("ah! shorthand for attribute brace read dangling text", span))?;
+    }
 
     ctx.complete_with(Attribute::Short { variable, property })
 }
@@ -123,8 +144,9 @@ pub fn read_full_attribute(reader: TokenReader) -> Result<Attribute, ComplexErro
 
     let value = expr::read(
         reader.clone(),
-        // attribute value expression ends at tag closings
-        vec!["/>", ">"],
+        // attribute value expression ends at tag closings,
+        // as well as prop spread (yeah, you get no attr=from..to)
+        vec!["/>", ">", ".."],
     )?;
 
     ctx.complete_with(Attribute::Full {
@@ -138,16 +160,29 @@ pub fn read_full_attribute(reader: TokenReader) -> Result<Attribute, ComplexErro
 pub fn read_attributes(reader: TokenReader) -> Result<Attributes, InvalidSyntax> {
     let ctx = reader.save();
 
-    let mut results = HashMap::<String, Attribute>::new();
+    let mut names = HashSet::<String>::new();
+    let mut results = Vec::new();
     loop {
+        match read_prop_spread(reader.clone()) {
+            Ok(attribute) => {
+                results.push(attribute);
+                continue;
+            }
+            Err(ComplexError::DoesNotMatchPrerequisite) => {}
+            Err(ComplexError::InvalidSyntax(e)) => return Err(e),
+        }
+
         match read_short_attribute(reader.clone()) {
             Ok(attribute) => {
-                let attribute_name = attribute.name_string();
+                let attribute_name = attribute.name_string().unwrap();
 
-                (!results.contains_key(&attribute_name))
-                    .require_or_invalid_syntax("Repeated attribute name", attribute.name_span())?;
+                (!names.contains(&attribute_name)).require_or_invalid_syntax(
+                    "Repeated attribute name",
+                    attribute.name_span().unwrap(),
+                )?;
 
-                results.insert(attribute_name, attribute);
+                names.insert(attribute_name);
+                results.push(attribute);
                 continue;
             }
             Err(ComplexError::DoesNotMatchPrerequisite) => {}
@@ -156,12 +191,15 @@ pub fn read_attributes(reader: TokenReader) -> Result<Attributes, InvalidSyntax>
 
         match read_full_attribute(reader.clone()) {
             Ok(attribute) => {
-                let attribute_name = attribute.name_string();
+                let attribute_name = attribute.name_string().unwrap();
 
-                (!results.contains_key(&attribute_name))
-                    .require_or_invalid_syntax("Repeated attribute name", attribute.name_span())?;
+                (!names.contains(&attribute_name)).require_or_invalid_syntax(
+                    "Repeated attribute name",
+                    attribute.name_span().unwrap(),
+                )?;
 
-                results.insert(attribute_name, attribute);
+                names.insert(attribute_name);
+                results.push(attribute);
                 continue;
             }
             Err(ComplexError::DoesNotMatchPrerequisite) => {}
