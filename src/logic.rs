@@ -40,15 +40,21 @@ impl From<DoesNotMatchPrerequisite> for ComplexError {
 }
 
 impl From<InvalidSyntax> for ComplexError {
-    fn from(e: InvalidSyntax) -> Self { Self::InvalidSyntax(e) }
+    fn from(e: InvalidSyntax) -> Self {
+        Self::InvalidSyntax(e)
+    }
 }
 
 impl From<(&'static str, Span)> for InvalidSyntax {
-    fn from((message, span): (&'static str, Span)) -> Self { Self(message, span) }
+    fn from((message, span): (&'static str, Span)) -> Self {
+        Self(message, span)
+    }
 }
 
 impl From<(&'static str, Span)> for ComplexError {
-    fn from(e: (&'static str, Span)) -> Self { Self::InvalidSyntax(e.into()) }
+    fn from(e: (&'static str, Span)) -> Self {
+        Self::InvalidSyntax(e.into())
+    }
 }
 
 // RequireDoesNotMatchPrerequisite
@@ -62,7 +68,9 @@ trait RequireOrDoesNotMatchPrerequisite {
 impl RequireOrDoesNotMatchPrerequisite for DoesNotMatchPrerequisite {
     type Ret = DoesNotMatchPrerequisite;
 
-    fn require_or_does_not_match_prerequisite(self) -> Self::Ret { self }
+    fn require_or_does_not_match_prerequisite(self) -> Self::Ret {
+        self
+    }
 }
 
 impl RequireOrDoesNotMatchPrerequisite for bool {
@@ -97,8 +105,9 @@ impl RequireOrInvalidSyntax for ComplexError {
 
     fn require_or_invalid_syntax(self, message: &'static str, span: Span) -> Self::Ret {
         match self {
-            ComplexError::DoesNotMatchPrerequisite =>
-                DoesNotMatchPrerequisite.require_or_invalid_syntax(message, span),
+            ComplexError::DoesNotMatchPrerequisite => {
+                DoesNotMatchPrerequisite.require_or_invalid_syntax(message, span)
+            }
             ComplexError::InvalidSyntax(e) => e,
         }
     }
@@ -211,7 +220,7 @@ impl ReadPunctExact for &'static str {
 
         let mut results = Vec::new();
         for expected in self.chars() {
-            results.push(expected.read_punct_exact(reader.clone())?);
+            results.push(read_punct_exact(reader.clone(), expected)?);
         }
 
         ctx.complete_with(results)
@@ -243,17 +252,13 @@ pub fn read_if_opt_let_expr(reader: TokenReader) -> Result<TokenStream, ComplexE
     }
 
     results.append_from(
-        read_expression(reader.clone(), vec![], true).require_or_invalid_syntax(
-            "Expected a condition for an if-let expression",
-            span,
-        )?,
+        read_expression(reader.clone(), vec![])
+            .require_or_invalid_syntax("Expected a condition for an if-let expression", span)?,
     );
-    results.push_from(
-        read_brace(reader.clone()).require_or_invalid_syntax(
-            "Expected an if-true braces value for an if-let expression",
-            span,
-        )?,
-    );
+    results.push_from(read_brace(reader.clone()).require_or_invalid_syntax(
+        "Expected an if-true braces value for an if-let expression",
+        span,
+    )?);
 
     'read_else: {
         let Ok(r#else) = read_ident_exact(reader.clone(), "else") else {
@@ -266,8 +271,8 @@ pub fn read_if_opt_let_expr(reader: TokenReader) -> Result<TokenStream, ComplexE
             Ok(else_if) => {
                 results.append_from(else_if);
                 break 'read_else;
-            },
-            Err(ComplexError::DoesNotMatchPrerequisite) => {},
+            }
+            Err(ComplexError::DoesNotMatchPrerequisite) => {}
             Err(e) => return Err(e),
         }
 
@@ -295,16 +300,12 @@ pub fn read_match_expr(reader: TokenReader) -> Result<TokenStream, ComplexError>
     results.push_from(match_keyword);
 
     results.append_from(
-        read_expression(reader.clone(), vec![], true).require_or_invalid_syntax(
-            "Expected a value to match for a match expression",
-            span,
-        )?,
+        read_expression(reader.clone(), vec![])
+            .require_or_invalid_syntax("Expected a value to match for a match expression", span)?,
     );
     results.push_from(
-        read_brace(reader.clone()).require_or_invalid_syntax(
-            "Expected a matcher brace for a match expression",
-            span,
-        )?,
+        read_brace(reader.clone())
+            .require_or_invalid_syntax("Expected a matcher brace for a match expression", span)?,
     );
 
     ctx.complete_with(tt_stream![results])
@@ -313,16 +314,14 @@ pub fn read_match_expr(reader: TokenReader) -> Result<TokenStream, ComplexError>
 pub fn read_expression_part(
     reader: TokenReader,
     early_quit_punct_sequences: Vec<&'static str>,
-    expects_brace_after: bool,
     last: Option<&TokenTree>,
 ) -> Result<TokenStream, ComplexError> {
     for early_quit_punct_sequence in early_quit_punct_sequences.clone() {
         let _ctx = reader.save(); // has to be _ctx for Drop to work at the end of the scope
 
-        if let Err(DoesNotMatchPrerequisite) = read_punct_exact(
-            reader.clone(),
-            early_quit_punct_sequence,
-        ) {
+        if let Err(DoesNotMatchPrerequisite) =
+            read_punct_exact(reader.clone(), early_quit_punct_sequence)
+        {
             continue;
         }
 
@@ -333,10 +332,7 @@ pub fn read_expression_part(
         let ctx = reader.save();
 
         if let Ok(punct) = read_punct(reader.clone()) {
-            // Do not allow `<` in children expressions, as it is a tag start
-            if expects_brace_after || punct.as_char() != '<' {
-                return ctx.complete_with(tt_stream![punct]);
-            }
+            return ctx.complete_with(tt_stream![punct]);
         }
     }
 
@@ -348,10 +344,10 @@ pub fn read_expression_part(
                 match last {
                     // allow `if ...` only after puncts (like `+` and such) or at beginning
                     Some(TokenTree::Punct(_)) | None => return ctx.complete_with(expr),
-                    _ => {},
+                    _ => {}
                 }
-            },
-            Err(ComplexError::DoesNotMatchPrerequisite) => {},
+            }
+            Err(ComplexError::DoesNotMatchPrerequisite) => {}
             Err(e) => return Err(e),
         }
     }
@@ -364,10 +360,10 @@ pub fn read_expression_part(
                 match last {
                     // allow `match ...` only after puncts (like `+` and such) or at beginning
                     Some(TokenTree::Punct(_)) | None => return ctx.complete_with(expr),
-                    _ => {},
+                    _ => {}
                 }
-            },
-            Err(ComplexError::DoesNotMatchPrerequisite) => {},
+            }
+            Err(ComplexError::DoesNotMatchPrerequisite) => {}
             Err(e) => return Err(e),
         }
     }
@@ -379,7 +375,7 @@ pub fn read_expression_part(
             match last {
                 // literal is fine after punct or nothing
                 Some(TokenTree::Punct(_)) | None => return ctx.complete_with(tt_stream![literal]),
-                _ => {},
+                _ => {}
             }
         }
     }
@@ -390,11 +386,11 @@ pub fn read_expression_part(
         if let Ok(group) = read_group(reader.clone()) {
             match last {
                 // do not put `{}` after another brace - this is handled by `match`/`if`
-                Some(TokenTree::Group(_)) if group.delimiter() == Delimiter::Brace => {},
+                Some(TokenTree::Group(_)) if group.delimiter() == Delimiter::Brace => {}
                 // same for literal
-                Some(TokenTree::Literal(_)) if group.delimiter() == Delimiter::Brace => {},
+                Some(TokenTree::Literal(_)) if group.delimiter() == Delimiter::Brace => {}
                 // do not allow `{}` after ident
-                Some(TokenTree::Ident(_)) if group.delimiter() == Delimiter::Brace => {},
+                Some(TokenTree::Ident(_)) if group.delimiter() == Delimiter::Brace => {}
                 // group is fine in all other cases
                 _ => return ctx.complete_with(tt_stream![group]),
             }
@@ -408,7 +404,7 @@ pub fn read_expression_part(
             match last {
                 // ident is fine after punct or nothing
                 Some(TokenTree::Punct(_)) | None => return ctx.complete_with(tt_stream!(ident)),
-                _ => {},
+                _ => {}
             }
         }
     }
@@ -419,7 +415,6 @@ pub fn read_expression_part(
 pub fn read_expression(
     reader: TokenReader,
     early_quit_punct_sequences: Vec<&'static str>,
-    in_block_expr: bool,
 ) -> Result<TokenStream, ComplexError> {
     let ctx = reader.save();
 
@@ -428,7 +423,6 @@ pub fn read_expression(
         match read_expression_part(
             reader.clone(),
             early_quit_punct_sequences.clone(),
-            in_block_expr,
             results.last(),
         ) {
             Ok(value) => results.append_from(value),
@@ -457,8 +451,8 @@ pub fn read_generics(reader: TokenReader) -> Result<Option<Generics>, InvalidSyn
         generics.append_from(
             match read_expression(
                 reader.clone(),
+                // generics end at generic closing
                 vec![">"],
-                false,
             ) {
                 Ok(expr) => expr,
                 Err(ComplexError::DoesNotMatchPrerequisite) => break,
@@ -466,12 +460,10 @@ pub fn read_generics(reader: TokenReader) -> Result<Option<Generics>, InvalidSyn
             },
         );
 
-        generics.push_from(
-            match read_punct_exact(reader.clone(), ',') {
-                Ok(expr) => expr,
-                Err(DoesNotMatchPrerequisite) => break,
-            },
-        );
+        generics.push_from(match read_punct_exact(reader.clone(), ',') {
+            Ok(expr) => expr,
+            Err(DoesNotMatchPrerequisite) => break,
+        });
     }
 
     read_punct_exact(reader.clone(), '>').require_or_invalid_syntax(
@@ -480,14 +472,10 @@ pub fn read_generics(reader: TokenReader) -> Result<Option<Generics>, InvalidSyn
     )?;
     let span = span; // TODO span from start to end
 
-    (!generics.is_empty()).require_or_invalid_syntax(
-        "ah! tag generics should not be empty",
-        span,
-    )?;
+    (!generics.is_empty())
+        .require_or_invalid_syntax("ah! tag generics should not be empty", span)?;
 
-    ctx.complete_with(Some(Generics::new(
-        generics, span,
-    )))
+    ctx.complete_with(Some(Generics::new(generics, span)))
 }
 
 pub fn read_attribute_name(reader: TokenReader) -> Result<TokenStream, DoesNotMatchPrerequisite> {
@@ -517,20 +505,14 @@ pub fn read_short_attribute(reader: TokenReader) -> Result<Attribute, ComplexErr
 
     let group = read_brace(reader.clone())?;
     let span = group.span();
-    let group_vec = group
-        .stream()
-        .into_iter()
-        .collect::<Vec<_>>();
+    let group_vec = group.stream().into_iter().collect::<Vec<_>>();
 
     (group_vec.len() == 1).require_or_invalid_syntax(
         "Shorthand for attributes is supposed to contain a single variable name",
         span,
     )?;
 
-    let variable = read_ident(TokenReader::from(
-        group.stream(),
-    ))
-    .require_or_invalid_syntax(
+    let variable = read_ident(TokenReader::from(group.stream())).require_or_invalid_syntax(
         "Shorthand for attributes should contain a variable name",
         span,
     )?;
@@ -546,15 +528,13 @@ pub fn read_full_attribute(reader: TokenReader) -> Result<Attribute, ComplexErro
     let name = read_attribute_name(reader.clone())?;
     let span = name.span();
 
-    let equals = read_punct_exact(reader.clone(), '=').require_or_invalid_syntax(
-        "Expected '=' after attribute name",
-        span,
-    )?;
+    let equals = read_punct_exact(reader.clone(), '=')
+        .require_or_invalid_syntax("Expected '=' after attribute name", span)?;
 
     let value = read_expression(
         reader.clone(),
+        // attribute value expression ends at tag closings
         vec!["/>", ">"],
-        false,
     )?;
 
     ctx.complete_with(Attribute::Full {
@@ -574,15 +554,13 @@ pub fn read_attributes(reader: TokenReader) -> Result<Attributes, InvalidSyntax>
             Ok(attribute) => {
                 let attribute_name = attribute.name_string();
 
-                (!results.contains_key(&attribute_name)).require_or_invalid_syntax(
-                    "Repeated attribute name",
-                    attribute.name_span(),
-                )?;
+                (!results.contains_key(&attribute_name))
+                    .require_or_invalid_syntax("Repeated attribute name", attribute.name_span())?;
 
                 results.insert(attribute_name, attribute);
                 continue;
-            },
-            Err(ComplexError::DoesNotMatchPrerequisite) => {},
+            }
+            Err(ComplexError::DoesNotMatchPrerequisite) => {}
             Err(ComplexError::InvalidSyntax(e)) => return Err(e),
         }
 
@@ -590,15 +568,13 @@ pub fn read_attributes(reader: TokenReader) -> Result<Attributes, InvalidSyntax>
             Ok(attribute) => {
                 let attribute_name = attribute.name_string();
 
-                (!results.contains_key(&attribute_name)).require_or_invalid_syntax(
-                    "Repeated attribute name",
-                    attribute.name_span(),
-                )?;
+                (!results.contains_key(&attribute_name))
+                    .require_or_invalid_syntax("Repeated attribute name", attribute.name_span())?;
 
                 results.insert(attribute_name, attribute);
                 continue;
-            },
-            Err(ComplexError::DoesNotMatchPrerequisite) => {},
+            }
+            Err(ComplexError::DoesNotMatchPrerequisite) => {}
             Err(ComplexError::InvalidSyntax(e)) => return Err(e),
         }
 
@@ -618,8 +594,8 @@ pub fn read_tag_name_dynamic(reader: TokenReader) -> Result<(Punct, TokenStream)
 
     let name = read_expression(
         reader.clone(),
-        vec!["<", ">"],
-        false,
+        // generic + tag closings
+        vec!["<", "/>", ">"],
     )
     .require_or_invalid_syntax(
         "Expected expression after ah! '@' dynamic tag definition",
@@ -696,8 +672,8 @@ pub fn read_tag_open(reader: TokenReader) -> Result<(TagOpen, bool), ComplexErro
                     name,
                     attributes,
                 };
-            },
-            Err(ComplexError::DoesNotMatchPrerequisite) => {},
+            }
+            Err(ComplexError::DoesNotMatchPrerequisite) => {}
             Err(e) => return Err(e),
         }
 
@@ -730,10 +706,8 @@ pub fn read_tag_open(reader: TokenReader) -> Result<(TagOpen, bool), ComplexErro
 
     let void = read_punct_exact(reader.clone(), '/').is_ok();
 
-    read_punct_exact(reader.clone(), '>').require_or_invalid_syntax(
-        "Expected ah! tag start closing character '>'",
-        span,
-    )?;
+    read_punct_exact(reader.clone(), '>')
+        .require_or_invalid_syntax("Expected ah! tag start closing character '>'", span)?;
 
     ctx.complete_with((result, void))
 }
@@ -741,16 +715,12 @@ pub fn read_tag_open(reader: TokenReader) -> Result<(TagOpen, bool), ComplexErro
 pub fn read_tag_close(reader: TokenReader, span: Span) -> Result<TagClose, InvalidSyntax> {
     let ctx = reader.save();
 
-    let start_punct = read_punct_exact(reader.clone(), '<').require_or_invalid_syntax(
-        "Expected ah! tag end opening character '<'",
-        span,
-    )?;
+    let start_punct = read_punct_exact(reader.clone(), '<')
+        .require_or_invalid_syntax("Expected ah! tag end opening character '<'", span)?;
     let span = start_punct.span();
 
-    read_punct_exact(reader.clone(), '/').require_or_invalid_syntax(
-        "Expected ah! tag end identifying character '/'",
-        span,
-    )?;
+    read_punct_exact(reader.clone(), '/')
+        .require_or_invalid_syntax("Expected ah! tag end identifying character '/'", span)?;
 
     let result = 'read_name: {
         if let Ok(start) = read_punct_exact(reader.clone(), '@') {
@@ -784,10 +754,8 @@ pub fn read_tag_close(reader: TokenReader, span: Span) -> Result<TagClose, Inval
         TagClose::Fragment
     };
 
-    read_punct_exact(reader.clone(), '>').require_or_invalid_syntax(
-        "Expected ah! tag end closing character '>'",
-        span,
-    )?;
+    read_punct_exact(reader.clone(), '>')
+        .require_or_invalid_syntax("Expected ah! tag end closing character '>'", span)?;
 
     ctx.complete_with(result)
 }
@@ -806,16 +774,11 @@ pub fn read_tag(reader: TokenReader) -> Result<Tag, ComplexError> {
         let span = tag_close.span();
 
         if !tag_open.close_match(&tag_close) {
-            return Err((
-                "Mismatched ah! tag start and tag end",
-                span,
-            ))?;
+            return Err(("Mismatched ah! tag start and tag end", span))?;
         }
     }
 
-    ctx.complete_with(Tag::new(
-        tag_open, children, void,
-    ))
+    ctx.complete_with(Tag::new(tag_open, children, void))
 }
 
 pub fn read_if_opt_let_content(reader: TokenReader) -> Result<IfOptLet, ComplexError> {
@@ -830,10 +793,8 @@ pub fn read_if_opt_let_content(reader: TokenReader) -> Result<IfOptLet, ComplexE
     }
 
     condition.append_from(
-        read_expression(reader.clone(), vec![], true).require_or_invalid_syntax(
-            "Expected a condition for an if-let content",
-            span,
-        )?,
+        read_expression(reader.clone(), vec![])
+            .require_or_invalid_syntax("Expected a condition for an if-let content", span)?,
     );
 
     let if_true = read_brace(reader.clone()).require_or_invalid_syntax(
@@ -851,26 +812,20 @@ pub fn read_if_opt_let_content(reader: TokenReader) -> Result<IfOptLet, ComplexE
 
         match read_if_opt_let_content(reader.clone()) {
             Ok(else_if) => {
-                r#else = Some((
-                    else_keyword,
-                    Rc::new(Content::IfOptLet(else_if)),
-                ));
+                r#else = Some((else_keyword, Rc::new(Content::IfOptLet(else_if))));
                 break 'read_else;
-            },
-            Err(ComplexError::DoesNotMatchPrerequisite) => {},
+            }
+            Err(ComplexError::DoesNotMatchPrerequisite) => {}
             Err(e) => return Err(e),
         };
 
         match read_brace(reader.clone()) {
             Ok(if_false) => {
                 let if_false = read_children::<read_children::InBlock>(if_false.stream())?;
-                r#else = Some((
-                    else_keyword,
-                    Rc::new(if_false),
-                ));
+                r#else = Some((else_keyword, Rc::new(if_false)));
                 break 'read_else;
-            },
-            Err(DoesNotMatchPrerequisite) => {},
+            }
+            Err(DoesNotMatchPrerequisite) => {}
         }
 
         return Err((
@@ -888,32 +843,23 @@ pub fn read_if_opt_let_content(reader: TokenReader) -> Result<IfOptLet, ComplexE
 
 pub fn read_for_content(
     reader: TokenReader,
-    finish_at_tag_end_sequence: Vec<&'static str>,
+    early_quit_punct_sequences: Vec<&'static str>,
 ) -> Result<TokenStream, ComplexError> {
     let ctx = reader.save();
 
     match read_brace(reader.clone()) {
-        Ok(group) =>
-            return read_for_content(
-                TokenReader::from(group.stream()),
-                vec![],
-            )
-            .and_then(|value| ctx.complete_with(value)),
-        Err(DoesNotMatchPrerequisite) => {},
+        Ok(group) => {
+            return read_for_content(TokenReader::from(group.stream()), vec![])
+                .and_then(|value| ctx.complete_with(value))
+        }
+        Err(DoesNotMatchPrerequisite) => {}
     };
 
     let r#for = read_ident_exact(reader.clone(), "for")?;
     let span = r#for.span();
 
-    let expr = read_expression(
-        reader.clone(),
-        finish_at_tag_end_sequence,
-        false,
-    )
-    .require_or_invalid_syntax(
-        "Expected an expression after for keyword",
-        span,
-    )?;
+    let expr = read_expression(reader.clone(), early_quit_punct_sequences)
+        .require_or_invalid_syntax("Expected an expression after for keyword", span)?;
 
     ctx.complete_with(tt_stream![r#for, expr])
 }
@@ -926,18 +872,33 @@ pub mod read_content {
     use super::*;
 
     pub trait Location: private::Sealed {
-        fn early_quit_punct_sequences() -> Vec<&'static str> { vec![] }
+        fn early_quit_punct_sequences() -> Vec<&'static str>;
+
+        fn early_quit_punct_sequences_expr() -> Vec<&'static str>;
     }
 
     pub struct InTag;
 
     impl Location for InTag {
-        fn early_quit_punct_sequences() -> Vec<&'static str> { vec!["</"] }
+        fn early_quit_punct_sequences() -> Vec<&'static str> {
+            vec!["</"]
+        }
+
+        fn early_quit_punct_sequences_expr() -> Vec<&'static str> {
+            vec!["</", "<"]
+        }
     }
 
     pub struct InBlock;
 
     impl Location for InBlock {
+        fn early_quit_punct_sequences() -> Vec<&'static str> {
+            vec![]
+        }
+
+        fn early_quit_punct_sequences_expr() -> Vec<&'static str> {
+            vec!["<"]
+        }
     }
 }
 
@@ -949,10 +910,9 @@ pub fn read_content<Loc: read_content::Location>(
     'try_early_quit: for early_quit_punct_sequence in Loc::early_quit_punct_sequences() {
         let _ctx = reader.save(); // has to be _ctx for Drop to work at the end of the scope
 
-        if let Err(DoesNotMatchPrerequisite) = read_punct_exact(
-            reader.clone(),
-            early_quit_punct_sequence,
-        ) {
+        if let Err(DoesNotMatchPrerequisite) =
+            read_punct_exact(reader.clone(), early_quit_punct_sequence)
+        {
             continue 'try_early_quit;
         }
 
@@ -961,32 +921,25 @@ pub fn read_content<Loc: read_content::Location>(
 
     match read_tag(reader.clone()) {
         Ok(tag) => return ctx.complete_with(Content::Tag(tag)),
-        Err(ComplexError::DoesNotMatchPrerequisite) => {},
+        Err(ComplexError::DoesNotMatchPrerequisite) => {}
         Err(e) => return Err(e),
     }
 
-    match read_for_content(
-        reader.clone(),
-        Loc::early_quit_punct_sequences(),
-    ) {
+    match read_for_content(reader.clone(), Loc::early_quit_punct_sequences_expr()) {
         Ok(r#for) => return ctx.complete_with(Content::For(r#for)),
-        Err(ComplexError::DoesNotMatchPrerequisite) => {},
+        Err(ComplexError::DoesNotMatchPrerequisite) => {}
         Err(e) => return Err(e),
     }
 
     match read_if_opt_let_content(reader.clone()) {
         Ok(if_opt_let) => return ctx.complete_with(Content::IfOptLet(if_opt_let)),
-        Err(ComplexError::DoesNotMatchPrerequisite) => {},
+        Err(ComplexError::DoesNotMatchPrerequisite) => {}
         Err(e) => return Err(e),
     }
 
-    match read_expression(
-        reader.clone(),
-        Loc::early_quit_punct_sequences(),
-        false,
-    ) {
+    match read_expression(reader.clone(), Loc::early_quit_punct_sequences_expr()) {
         Ok(expr) => return ctx.complete_with(Content::Expression(expr)),
-        Err(ComplexError::DoesNotMatchPrerequisite) => {},
+        Err(ComplexError::DoesNotMatchPrerequisite) => {}
         Err(e) => return Err(e),
     }
 
@@ -1041,17 +994,10 @@ pub mod read_children {
 
             let result = if children.len() != 1 {
                 // auto-fragment at 0 or 2+ children inside braces {}
-                Content::Tag(Tag::new(
-                    TagOpen::Fragment,
-                    children,
-                    false,
-                ))
+                Content::Tag(Tag::new(TagOpen::Fragment, children, false))
             } else {
                 // grab first child if there's only one
-                children
-                    .into_iter()
-                    .next()
-                    .unwrap()
+                children.into_iter().next().unwrap()
             };
 
             Ok(result)
@@ -1076,9 +1022,7 @@ pub fn read_children<Loc: read_children::Location>(
 
     let dangling_span = {
         let ctx = reader.save();
-        ctx.next()
-            .as_ref()
-            .map(TokenTree::span) // TODO read until end to determine total span
+        ctx.next().as_ref().map(TokenTree::span) // TODO read until end to determine total span
     };
 
     let result = Loc::process_children(children, dangling_span)?;
@@ -1090,15 +1034,11 @@ mod private {
 
     pub trait Sealed {}
 
-    impl Sealed for read_children::InTag {
-    }
+    impl Sealed for read_children::InTag {}
 
-    impl Sealed for read_children::InBlock {
-    }
+    impl Sealed for read_children::InBlock {}
 
-    impl Sealed for read_content::InTag {
-    }
+    impl Sealed for read_content::InTag {}
 
-    impl Sealed for read_content::InBlock {
-    }
+    impl Sealed for read_content::InBlock {}
 }

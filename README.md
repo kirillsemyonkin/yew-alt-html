@@ -52,7 +52,7 @@ should be supported by the `ah!` macro.
 If your code does not work by just replacing `html!` with `ah!`,
 [submit an issue](https://github.com/kirillsemyonkin/yew-alt-html/issues).
 
-Some syntax is limited (for example, using `<` in attributes without an `if`).
+Some syntax is limited (for example, using `>` in attributes without an `if`).
 Suggested solution would be moving complex values into variables before `ah!`,
 or wrapping values in `{}` braces just like you do in `html!`.
 
