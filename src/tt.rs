@@ -14,6 +14,10 @@ pub fn group(delimiter: Delimiter, items: impl IntoTokenStream) -> Group {
     Group::new(delimiter, items.into_token_stream())
 }
 
+pub fn parenthesis(items: impl IntoTokenStream) -> Group {
+    tt::group(Delimiter::Parenthesis, items)
+}
+
 pub fn brace(items: impl IntoTokenStream) -> Group {
     tt::group(Delimiter::Brace, items)
 }
@@ -27,6 +31,18 @@ pub trait IntoIdent {
 impl IntoIdent for &str {
     fn into_ident(self) -> Ident {
         Ident::new(self, Span::mixed_site())
+    }
+}
+
+impl IntoIdent for String {
+    fn into_ident(self) -> Ident {
+        self.as_str().into_ident()
+    }
+}
+
+impl IntoIdent for char {
+    fn into_ident(self) -> Ident {
+        self.to_string().into_ident()
     }
 }
 
@@ -209,6 +225,18 @@ impl<T: IntoTokenStream> IntoTokenStream for Vec<T> {
     }
 }
 
+impl IntoTokenStream for char {
+    fn into_token_stream(self) -> TokenStream {
+        self.into_punct().into_token_stream()
+    }
+}
+
+impl IntoTokenStream for () {
+    fn into_token_stream(self) -> TokenStream {
+        TokenStream::new()
+    }
+}
+
 //
 // tt_stream!
 //
@@ -228,7 +256,7 @@ macro_rules! tt_stream {
 //
 
 pub fn call_macro(name: impl IntoTokenStream, inner: impl IntoTokenStream) -> TokenStream {
-    tt_stream![name, tt::punct('!'), tt::brace(inner),]
+    tt_stream![name, '!', tt::brace(inner),]
 }
 
 macro_rules! tt_call_macro {

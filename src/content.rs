@@ -5,12 +5,14 @@ use crate::tt::IdentExt;
 use crate::tt::IntoTokenStream;
 use crate::tt::TokenStreamExt;
 use crate::tt_call_macro;
+use crate::tt_path;
 use crate::tt_stream;
 
 #[derive(Debug, Clone)]
 pub enum Content {
     Tag(Tag),
-    For(TokenStream),
+    ForIn(ForIn),
+    ForIter(TokenStream),
     IfOptLet(IfOptLet),
     Match(Match),
     Expression(TokenStream),
@@ -20,7 +22,8 @@ impl From<Content> for TokenStream {
     fn from(content: Content) -> Self {
         match content {
             Content::Tag(tag) => tt_stream![tag],
-            Content::For(expr) => tt_stream![tt::brace(expr)],
+            Content::ForIn(for_in) => tt_stream![for_in],
+            Content::ForIter(expr) => tt_stream![tt::brace(expr)],
             Content::IfOptLet(if_opt_let) => tt_stream![if_opt_let],
             Content::Match(r#match) => tt_stream![r#match],
             Content::Expression(expr) => tt_stream![tt::brace(expr)],
@@ -160,6 +163,89 @@ impl IntoTokenStream for IfOptLet {
 }
 
 //
+// ForIn
+//
+
+#[derive(Debug, Clone)]
+pub struct ForIn {
+    for_keyword: Ident,
+    pattern: TokenStream,
+    in_keyword: Ident,
+    iter: TokenStream,
+    body: Box<Content>,
+}
+
+impl ForIn {
+    pub fn new(
+        for_keyword: Ident,
+        pattern: TokenStream,
+        in_keyword: Ident,
+        iter: TokenStream,
+        body: Content,
+    ) -> Self {
+        Self {
+            for_keyword,
+            pattern,
+            in_keyword,
+            iter,
+            body: Box::new(body),
+        }
+    }
+}
+
+impl From<ForIn> for TokenStream {
+    fn from(
+        ForIn {
+            for_keyword,
+            pattern,
+            in_keyword,
+            iter,
+            body,
+        }: ForIn,
+    ) -> Self {
+        tt_stream![tt::brace(tt_stream![
+            for_keyword.clone(),
+            tt::brace(tt_stream![
+                // let mut _result = Vec::<::yew::html::Html>::new();
+                tt::ident("let"),
+                tt::ident("mut"),
+                tt::ident("_result"),
+                '=',
+                tt::ident("Vec"),
+                tt::punct("::"),
+                '<',
+                tt_path!(::yew::html::Html),
+                '>',
+                tt::punct("::"),
+                tt::ident("new"),
+                tt::parenthesis(()),
+                ';',
+                // for $pattern in $iter { ... }
+                for_keyword,
+                pattern,
+                in_keyword,
+                iter,
+                tt::brace(tt_stream![
+                    // _result.push(::yew::html! { body })
+                    tt::ident("_result"),
+                    '.',
+                    tt::ident("push"),
+                    tt::parenthesis(tt_call_macro!(::yew::html!(body))),
+                ]),
+                // _result
+                tt::ident("_result"),
+            ])
+        ])]
+    }
+}
+
+impl IntoTokenStream for ForIn {
+    fn into_token_stream(self) -> TokenStream {
+        self.into()
+    }
+}
+
+//
 // Tag
 //
 
@@ -196,44 +282,45 @@ impl From<Tag> for TokenStream {
             } => {
                 if void {
                     // <...<...> ...=... />
-                    return tt_stream![tt::punct('<'), name, generics, attributes, tt::punct("/>")];
+                    return tt_stream!['<', name, generics, attributes, '/', '>'];
                 }
 
                 tt_stream![
                     // <...<...> ...=...>
-                    tt::punct('<'),
+                    '<',
                     name.clone(),
                     generics.clone(),
                     attributes,
-                    tt::punct('>'),
+                    '>',
                     // ...
                     children,
                     // </...<...>>
-                    tt::punct("</"),
+                    '<',
+                    '/',
                     name.clone(),
                     generics.clone(),
-                    tt::punct('>'),
+                    '>',
                 ]
             }
             TagOpen::Dashed { name, attributes } => {
                 if void {
                     // <... ...=... />
-                    return tt_stream![tt::punct('<'), name, attributes, tt::punct("/>")];
+                    return tt_stream!['<', name, attributes, '/', '>'];
                 }
 
                 tt_stream![
                     // <... ...=...>
-                    tt::punct('<'),
+                    '<',
                     name.clone(),
                     attributes,
-                    tt::punct('>'),
+                    '>',
                     // ...
                     children,
                     // </...>
-                    tt::punct('<'),
-                    tt::punct('/'),
+                    '<',
+                    '/',
                     name.clone(),
-                    tt::punct('>'),
+                    '>',
                 ]
             }
             TagOpen::Dynamic {
@@ -245,25 +332,26 @@ impl From<Tag> for TokenStream {
 
                 if void {
                     // <@{...} ...=... />
-                    return tt_stream![tt::punct('<'), start, name, attributes, tt::punct("/>")];
+                    return tt_stream!['<', start, name, attributes, '/', '>'];
                 }
 
                 tt_stream![
                     // <@{...} ...=...>
-                    tt::punct('<'),
+                    '<',
                     start.clone(),
                     name,
                     attributes,
-                    tt::punct('>'),
+                    '>',
                     // ...
                     children,
                     // </@>
-                    tt::punct("</"),
+                    '<',
+                    '/',
                     start.clone(),
-                    tt::punct('>'),
+                    '>',
                 ]
             }
-            TagOpen::Fragment => tt_stream![tt::punct("<>"), children, tt::punct("</>")],
+            TagOpen::Fragment => tt_stream!['<', '>', children, '<', '/', '>'],
         }
     }
 }
@@ -399,7 +487,7 @@ impl From<Generics> for TokenStream {
     fn from(generics: Generics) -> Self {
         generics
             .value
-            .map(|generics| tt_stream![tt::punct('<'), generics, tt::punct('>')])
+            .map(|generics| tt_stream!['<', generics, '>'])
             .unwrap_or_default()
     }
 }

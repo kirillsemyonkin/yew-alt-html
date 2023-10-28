@@ -30,6 +30,7 @@ pub fn App() -> Html {
 
     use LoadState::*;
     let state = Loaded;
+    let items = vec![1, 2, 3];
     ah! {
         <h1 style=italic_style>"Hello " name "!"</>
         match state {
@@ -37,6 +38,11 @@ pub fn App() -> Html {
             Failed => "Load failed!",
             Loaded => <p>"Welcome to "<code>"yew-alt-html"</>"!"</>,
         }
+        <ul>
+            for item in items {
+                <li>item</>
+            }
+        </>
     }
 }
 ```
@@ -54,10 +60,11 @@ Following problems should be solved by this crate:
 - Having to wrap attributes in `{}`
   (mind that shorthand still uses `{ variable }`).
 - Having to repeat generics (Yew-only) and tag names
-  (not very HTML to get rid of, but still neat to have considered)
+  (not very HTML to omit, but still neat to have considered)
   when closing tags.
 - Having to use fragment `<></>` when using multiple nodes in the macro root.
 - Not being able to use `match` just like `if`.
+- Cumbersome `{ for ... }` notation (fixed in 0.4.0).
 
 ## Possible issues
 
@@ -74,7 +81,7 @@ or wrapping values in `{}` braces just like you do in `html!`.
 
 - [x] Support for writing tags directly in `match` cases
       (requires wrapping the tag in `ah!` currently), similar to `if`
-      (added in 0.2.0).
+      (fixed in 0.2.0).
 - [ ] Not using `html!` under the hood: adding more checks
       (that are currently handled by `html!`)
       and generating virtual dom manually.

@@ -14,6 +14,7 @@ use self::tt::*;
 use crate::content::Attribute;
 use crate::content::Attributes;
 use crate::content::Content;
+use crate::content::ForIn;
 use crate::content::Generics;
 use crate::content::IfOptLet;
 use crate::content::Match;
@@ -21,6 +22,7 @@ use crate::content::MatchCase;
 use crate::content::Tag;
 use crate::content::TagClose;
 use crate::content::TagOpen;
+use crate::logic::pat::EarlyQuitAt;
 use crate::reader::TokenReader;
 use crate::tt::TokenStreamExt;
 use crate::tt_stream;
@@ -397,10 +399,11 @@ pub fn read_if_opt_let_content(reader: TokenReader) -> Result<IfOptLet, ComplexE
 
         condition.push_from(r#let);
 
-        let pattern = pat::read(reader.clone(), vec!["="]).require_or_invalid_syntax(
-            "Expected a pattern after if-optionally-let's `let` keyword",
-            span,
-        )?;
+        let pattern = pat::read(reader.clone(), vec![EarlyQuitAt::PunctSeq("=")])
+            .require_or_invalid_syntax(
+                "Expected a pattern after if-optionally-let's `let` keyword",
+                span,
+            )?;
         let span = pattern.span();
 
         condition.append_from(pattern);
@@ -460,6 +463,36 @@ pub fn read_if_opt_let_content(reader: TokenReader) -> Result<IfOptLet, ComplexE
     ctx.complete_with(IfOptLet::new(if_keyword, condition, if_true, r#else))
 }
 
+pub fn read_for_in_content(reader: TokenReader) -> Result<ForIn, ComplexError> {
+    let ctx = reader.save();
+
+    let for_keyword = read_ident_exact(reader.clone(), "for")?;
+    let span = for_keyword.span();
+
+    let pattern = pat::read(
+        reader.clone(),
+        // do not try to read `for... for... in ...` as valid: also stop at first matching `for`
+        vec![EarlyQuitAt::Ident("in"), EarlyQuitAt::Ident("for")],
+    )
+    .require_or_invalid_syntax("Expected a pattern after a for-in expression", span)?;
+
+    let in_keyword = read_ident_exact(reader.clone(), "in")?;
+    let span = in_keyword.span();
+
+    let iter = expr::read(reader.clone(), vec![]).require_or_invalid_syntax(
+        "Expected an expression after the `in` keyword of the for-in expression",
+        span,
+    )?;
+
+    let body = read_brace(reader.clone()).require_or_invalid_syntax(
+        "Expected iterator body braces after the for-in header",
+        span,
+    )?;
+    let body = read_children::<read_children::InBlock>(body.stream())?;
+
+    ctx.complete_with(ForIn::new(for_keyword, pattern, in_keyword, iter, body))
+}
+
 pub fn read_for_content(
     reader: TokenReader,
     early_quit_punct_sequences: Vec<&'static str>,
@@ -510,7 +543,7 @@ pub fn read_match_content_case(
     let reader = reader.into();
     let ctx = reader.save();
 
-    let pattern = pat::read(reader.clone(), vec!["=>"])?;
+    let pattern = pat::read(reader.clone(), vec![EarlyQuitAt::PunctSeq("=>")])?;
     let span = pattern.span();
 
     let arrow = tt_stream![read_punct_exact(reader.clone(), "=>")
@@ -663,8 +696,14 @@ pub fn read_content<Loc: read_content::Location>(
         Err(e) => return Err(e),
     }
 
+    match read_for_in_content(reader.clone()) {
+        Ok(for_in) => return ctx.complete_with(Content::ForIn(for_in)),
+        Err(ComplexError::DoesNotMatchPrerequisite) => {}
+        Err(e) => return Err(e),
+    }
+
     match read_for_content(reader.clone(), Loc::early_quit_punct_sequences_expr()) {
-        Ok(r#for) => return ctx.complete_with(Content::For(r#for)),
+        Ok(r#for) => return ctx.complete_with(Content::ForIter(r#for)),
         Err(ComplexError::DoesNotMatchPrerequisite) => {}
         Err(e) => return Err(e),
     }

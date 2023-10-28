@@ -6,20 +6,34 @@ use crate::tt_stream;
 use super::errors::*;
 use super::tt::*;
 
+#[derive(Clone, Copy)]
+pub enum EarlyQuitAt {
+    PunctSeq(&'static str),
+    Ident(&'static str),
+}
+
 fn read_part(
     reader: impl Into<TokenReader>,
-    early_quit_punct_sequences: Vec<&'static str>,
+    early_quit_at: Vec<EarlyQuitAt>,
 ) -> Result<TokenTree, DoesNotMatchPrerequisite> {
     let reader = reader.into();
     let ctx = reader.save();
 
-    for early_quit_punct_sequence in early_quit_punct_sequences.clone() {
+    for one in early_quit_at.clone() {
         let _ctx = reader.save(); // has to be _ctx for Drop to work at the end of the scope
 
-        if let Err(DoesNotMatchPrerequisite) =
-            read_punct_exact(reader.clone(), early_quit_punct_sequence)
-        {
-            continue;
+        use EarlyQuitAt::*;
+        match one {
+            PunctSeq(sequence) => {
+                if let Err(DoesNotMatchPrerequisite) = read_punct_exact(reader.clone(), sequence) {
+                    continue;
+                }
+            }
+            Ident(ident) => {
+                if let Err(DoesNotMatchPrerequisite) = read_ident_exact(reader.clone(), ident) {
+                    continue;
+                }
+            }
         }
 
         return Err(DoesNotMatchPrerequisite)?;
@@ -32,14 +46,14 @@ fn read_part(
 
 pub fn read(
     reader: impl Into<TokenReader>,
-    early_quit_punct_sequences: Vec<&'static str>,
+    early_quit_at: Vec<EarlyQuitAt>,
 ) -> Result<TokenStream, DoesNotMatchPrerequisite> {
     let reader = reader.into();
     let ctx = reader.save();
 
     let mut results = Vec::<TokenTree>::new();
 
-    while let Ok(pattern_part) = read_part(reader.clone(), early_quit_punct_sequences.clone()) {
+    while let Ok(pattern_part) = read_part(reader.clone(), early_quit_at.clone()) {
         results.push(pattern_part)
     }
 

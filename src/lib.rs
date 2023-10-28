@@ -11,9 +11,11 @@
 //! - Having to wrap attributes in `{}`
 //!   (mind that shorthand still uses `{ variable }`).
 //! - Having to repeat generics (Yew-only) and tag names
-//!   (not very HTML to get rid of, but still neat to have considered)
+//!   (not very HTML to omit, but still neat to have considered)
 //!   when closing tags.
 //! - Having to use fragment `<></>` when using multiple nodes in the macro root.
+//! - Not being able to use `match` just like `if`.
+//! - Cumbersome `{ for ... }` notation.
 //!
 //! ## Example
 //!
@@ -34,6 +36,7 @@
 //!
 //!     use LoadState::*;
 //!     let state = Loaded;
+//!     let items = vec![1, 2, 3];
 //!     ah! {
 //!         <h1 style=italic_style>"Hello " name "!"</>
 //!         match state {
@@ -41,6 +44,11 @@
 //!             Failed => "Load failed!",
 //!             Loaded => <p>"Welcome to "<code>"yew-alt-html"</>"!"</>,
 //!         }
+//!         <ul>
+//!             for item in items {
+//!                 <li>item</>
+//!             }
+//!         </>
 //!     }
 //! }
 //! ```
